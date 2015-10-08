@@ -58,7 +58,8 @@ int arr_len(char **arr){
 //need to find where to place this, not sure where the mode should be placed
 //in between commands? only applicable to one command or all?
 
-int run_mode(*tokens2[]){
+//doesnt flip back to sequential mode correctly 
+int run_mode(char *tokens2[]){
     int len = arr_len(tokens2);
     for (int j=0; j<len; j++){
         if (strcmp(tokens2[j], "p") == 0 || strcmp(tokens2[j],"parallel") ==0){
@@ -70,7 +71,7 @@ int run_mode(*tokens2[]){
 
 //helper function to see if it knows how to check if function is built in
 //(dont think we need to keep this after testing)
-char * built_in_check(* tokens2[]){
+char * built_in_check(char * tokens2[]){
     int len= arr_len(tokens2);
     for (int k=0; k<len; k++){
         printf("this is what youre checking %s \n", tokens2[k]);
@@ -82,12 +83,11 @@ char * built_in_check(* tokens2[]){
     }
 void execute_command(char *tokens2[], int mode){
     int toklen = arr_len(tokens2); 
-    int childrv =0;
     for (int i=0; i<toklen; i++){
         if (strcmp(tokens2[i],"exit") ==0){
             //printf("got here\n");
             //its not waiting until child processes are done..any ideas?
-            wait(&childrv);
+            wait(NULL);
             exit(EXIT_SUCCESS);
         }
         else if (strcmp(tokens2[i],"mode") == 0){
@@ -101,7 +101,7 @@ void execute_command(char *tokens2[], int mode){
         else{
         pid_t p = fork();
         if(p>0){
-            childrv=0;
+            int childrv=0;
             int id = wait(&childrv);
             }
         if (p == 0){
@@ -131,16 +131,21 @@ char** tokenify(const char *s, char * whitespace) {
     for (token=strtok(copy_s,whitespace); token != NULL; token= strtok(NULL,whitespace)){
         token_count++;
         }
+    //free(token);
     char **tokens = malloc(sizeof(char*)*token_count);
     int i =0;
     for (token=strtok(copy_s2,whitespace); token != NULL; token= strtok(NULL,whitespace)){
+        //i think this is where the memory leak is!
         tokens[i] = strdup(token);
         i++;
         }
-        tokens[token_count-1] = NULL;
-        free(copy_s);
-        free(copy_s2);
-        return tokens;
+   // free(token);
+    tokens[token_count-1] = NULL;
+    free(copy_s);
+    free(copy_s2);
+    //char ** temp = tokens;
+    //free(tokens);
+    return tokens;
 
     }
 
@@ -186,7 +191,7 @@ int main(int argc, char **argv) {
             //else if (strcmp(tokens2,"mode") == 0){
              //   printf("The current mode is %d\n", mode);
             //}
-            mode = run_mode(tokens2); //get mode 
+            mode += run_mode(tokens2); //get mode and keeps mode
             execute_command(tokens2,mode);
             //print_tokens(tokens2);
             free_tokens(tokens2);
