@@ -49,8 +49,11 @@ printf("--------------------------------------\n");
 
 struct node {
     int job;
+    char * descriptor;
     struct node *next; 
+    char * state;
 };
+
 
 void list_clear(struct node *list) {
     while (list != NULL) {
@@ -60,9 +63,11 @@ void list_clear(struct node *list) {
     }
 }
 
-struct node *list_append(int job, struct node *list) {
+struct node *list_append(int job, struct node *list, char * cur_job, char * state) {
     struct node *newnode = malloc(sizeof(struct node));
     newnode->job = job;
+    newnode->descriptor = cur_job;
+    newnode->state = state;
     newnode->next = NULL;
     struct node *head = list;
     if (head == NULL) {
@@ -131,7 +136,7 @@ int built_in_check(char * tokens[], int len){
         return 0;
     } else if (strcmp(tokens[0], "mode") == 0 && len == 2 && (strcmp(tokens[1], "p") == 0 || strcmp(tokens[1], "parallel") == 0)) {
         return 1;
-    } else if(strcmp(tokens[0], "job") == 0){
+    } else if(strcmp(tokens[0], "jobs") == 0){
         return 4;
         //print list of all processes that are currently running in the background
         //minimum, print process ID, command being executed, and process state
@@ -149,11 +154,33 @@ int built_in_check(char * tokens[], int len){
     
 }
 
-void built_in_handler(int mode, int built_in) {
+void built_in_handler(int mode, int built_in,struct node *head) {
     if (built_in == 2) {
         if (mode == 0) printf("Running in sequential mode\n");
         if (mode == 1) printf("Running in parallel mode\n");
     }
+    if (built_in == 4){
+        struct node * jobs = head;
+        while (jobs != NULL){
+            printf("Process: &d (%s) is %s\n", jobs->job, jobs->descriptor, jobs->state);
+        }
+    }
+    if (built_in == 5){
+        kill(head->job, SIGSTOP);
+        struct node * jobs2 = head;
+        while (jobs2 != NULL){
+            printf("Process: &d (%s) is %s\n", jobs2->job, jobs2->descriptor, jobs2->state);
+        }
+    }   
+    if (built_in ==6){
+        kill(head->job,SIGCONT);
+        struct node * jobs3 = head;
+        while (jobs3 != NULL){
+            printf("Process: &d (%s) is %s\n", jobs3->job, jobs3->descriptor, jobs3->state);
+        }
+ 
+    }
+
 }
 
 int seq_execute(char *tokens[], int len, int mode) {
@@ -197,11 +224,13 @@ int par_execute(char *tokens[], int len, struct node * head, int mode) {
     for (int i = 0; i < len; i++) {
         char** tokens2 = tokenify(tokens[i], " \t\n");
         if (*tokens2 != NULL) {
+            char * state = "running";
             int built_in = built_in_check(tokens2, arr_len(tokens2));
             if (built_in == -1) {
                 pid_t p = fork();
+                //kill(p, SIGCONT);
                 if (p > 0) {
-                    head = list_append(p, head);   
+                    head = list_append(p, head, tokens[i], state);   
                 }
                 if (p == 0) {
                     if (execv(tokens2[0], tokens2) < 0) {
@@ -216,7 +245,7 @@ int par_execute(char *tokens[], int len, struct node * head, int mode) {
                     free_tokens(tokens2);
                     break;
                 }
-                built_in_handler(mode, built_in);
+                built_in_handler(mode, built_in, head);
             }
         }
         free_tokens(tokens2);
