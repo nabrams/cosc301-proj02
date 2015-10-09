@@ -52,50 +52,12 @@ struct node {
     struct node *next; 
 };
 
-/*
- * this function just frees every node in the list.
- */
 void list_clear(struct node *list) {
     while (list != NULL) {
         struct node *tmp = list;
         list = list->next;
         free(tmp);
     }
-}
-
-/*
- * this function is provided to help you debug.
- */
-void list_print(const struct node *list) {
-    int i = 0;
-    printf("In list_print\n");
-    while (list != NULL) {
-        printf("List item %d: %d\n", i++, list->job);
-        list = list->next;
-    }
-}
-
-struct node *list_delete(int job, struct node *list) {
-    
-    struct node *head = list;
-    if (head->job == job) {
-        struct node *tmp = head;
-        head = head->next;
-        free(tmp);
-        return head;
-    }
-    struct node *nde = head;
-    while (nde->next != NULL) {
-            if (nde->next->job == job) {
-            struct node *tmp = nde->next;
-            nde->next = nde->next->next;
-            free(tmp);
-            return head;
-        }
-    }
-    return head;
-
-
 }
 
 struct node *list_append(int job, struct node *list) {
@@ -133,7 +95,6 @@ char** tokenify(const char *s, char * whitespace) {
     free(copy_s);
     free(copy_s2);
     return tokens;
-
     }
 
 void print_tokens(char *tokens[]) {
@@ -161,71 +122,26 @@ int arr_len(char **arr){
     return len;
 }
 
-int run_mode(char *tokens2[], int mode){
-    int len = arr_len(tokens2);
-    for (int j=0; j<len; j++){
-        if (strcmp(tokens2[j], "p") == 0 || strcmp(tokens2[j],"parallel") ==0){
-            return 1; //Parallel mode
-        } else if (strcmp(tokens2[j], "s") == 0 || strcmp(tokens2[j], "sequential") == 0){
-            return 0; //Sequential mode
-        }
-    }
-    return mode; //Previous mode
-}
-
-int built_in_check(char * tokens[], int len) {
+int built_in_check(char * tokens[], int len){
     if (strcmp(tokens[0], "exit") == 0) {
-        return 0;
-    } else if (strcmp(tokens[0], "mode") == 0 && len == 1) {
-        return 1;
-    } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "s") == 0 || strcmp(tokens[1], "sequential") == 0)) {
-        return 2;
-    } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "p") == 0 || strcmp(tokens[1], "parallel") == 0)) {
         return 3;
+    } else if (strcmp(tokens[0], "mode") == 0 && len == 1) {
+        return 2;
+    } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "s") == 0 || strcmp(tokens[1], "sequential") == 0)) {
+        return 0;
+    } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "p") == 0 || strcmp(tokens[1], "parallel") == 0)) {
+        return 1;    
     } else return -1;
-
-}
-void execute_command(char *tokens2[], int mode){
-    if (*tokens2 == NULL) {
-        printf("Invalid command\n");
-        return;
-    }
-    int toklen = arr_len(tokens2); 
-    //for (int i=0; i < toklen; i++){
-        //printf("%s\n", tokens2[i]);
-        if (strcmp(tokens2[0],"exit") == 0){
-            return;
-            //wait(NULL);
-            //exit(EXIT_SUCCESS);
-            return;
-        } else if (strcmp(tokens2[0],"mode") == 0 && arr_len(tokens2) == 1){
-            if (mode == 0){
-                printf("The current mode is Sequential \n");
-            }
-            else{
-                printf("The current mode is Parallel\n");
-            }
-        } else if (strcmp(tokens2[0],"mode") == 0 && arr_len(tokens2) == 2){
-            return;
-        } else {
-        pid_t p = fork();
-        if(p > 0){
-            int childrv=0;
-            int id = wait(&childrv);
-            //int id = waitpid(WAIT_ANY, &childrv, WAIT_MYPGRP);
-        }
-        if (p == 0){
-            if (execv(tokens2[0], tokens2) < 0) {
-                printf("Unrecognised command\n");  
-            }        
-        }
-        printf("child process finished\n");
-        //}
-    }
-
 }
 
-int seq_execute(char *tokens[], int len, struct node * head) {
+void built_in_handler(int mode, int built_in) {
+    if (built_in == 2) {
+        if (mode == 0) printf("Running in sequential mode\n");
+        if (mode == 1) printf("Running in parallel mode\n");
+    }
+}
+
+int seq_execute(char *tokens[], int len, struct node * head, int mode) {
     int res = -1;
     for (int i = 0; i < len; i++) {
         char **tokens2 = tokenify(tokens[i], " \t\n");
@@ -235,7 +151,7 @@ int seq_execute(char *tokens[], int len, struct node * head) {
                 pid_t p = fork();
                 if (p > 0) {
                     int childrv = 0;
-                    int id = wait(&childrv);
+                    wait(&childrv);
                 } else if (p == 0) {
                     if (execv(tokens2[0], tokens2) < 0) {
                         printf("Unrecognised command\n");
@@ -243,8 +159,15 @@ int seq_execute(char *tokens[], int len, struct node * head) {
                 }
                 printf("child process finished\n");
             } else {
-                if (res == -1) res = built_in;
-                else if (res != 0) res = built_in;
+                if (built_in == 0 || built_in == 1) {
+                    res = built_in;
+                } else if (built_in == 2) {
+                    if (mode == 0) printf("Running in sequential mode\n");
+                    if (mode == 1) printf("Running in parallel mode\n");
+                } else if (built_in == 3) {
+                    free_tokens(tokens2);
+                    return 2;
+                }
             }
         }
         free_tokens(tokens2);
@@ -252,12 +175,44 @@ int seq_execute(char *tokens[], int len, struct node * head) {
     return res;
 }
 
-int par_execute(char *tokens[], int len, struct node * head) {
+int par_execute(char *tokens[], int len, struct node * head, int mode) {
     int res = -1;
-    while (head != NULL) {
-        
+    for (int i = 0; i < len; i++) {
+        char** tokens2 = tokenify(tokens[i], " \t\n");
+        if (*tokens2 != NULL) {
+            int built_in = built_in_check(tokens2, arr_len(tokens2));
+            if (built_in == -1) {
+                pid_t p = fork();
+                if (p > 0) {
+                    head = list_append(p, head);   
+                }
+                if (p == 0) {
+                    if (execv(tokens2[0], tokens2) < 0) {
+                        printf("Invalid command\n");
+                    }
+                }
+            } else {
+                if (built_in == 0 || built_in == 1) {
+                    res = built_in;
+                } else if (built_in == 3) {
+                    res = 2;
+                    free_tokens(tokens2);
+                    break;
+                }
+                built_in_handler(mode, built_in);
+            }
+        }
+        free_tokens(tokens2);
     }
-
+    struct node * list = head;
+    while (list != NULL) {
+        int childrv = 0;
+        waitpid(list->job, &childrv, 0);
+        printf("child process finished\n");
+        list = list->next;
+    }
+    list_clear(head);
+    return res;
 }
 
 void remove_comments(char * buffer){
@@ -278,9 +233,8 @@ int main(int argc, char **argv) {
     fflush(stdout);
     char *buffer[1024];
     int mode = 0; //starts in sequential mode
-    int mode_tmp = 0;
-    struct node * head = NULL;
     while(fgets(buffer,1024,stdin) != NULL){
+        struct node * head = NULL;
         remove_comments(buffer);
         char **tokens = tokenify(buffer, ";");
         int toklen = arr_len(tokens);
@@ -288,33 +242,20 @@ int main(int argc, char **argv) {
         if (*tokens == NULL) {
             printf("Invalid prompt\n");
         } else if (mode == 0) {
-            res = seq_execute(tokens, toklen, head);    
+            res = seq_execute(tokens, toklen, head, mode);    
         } else if (mode == 1) {
-            res = par_execute(tokens, toklen, head);
+            res = par_execute(tokens, toklen, head, mode);
         }
         if (res != -1) {
             if (res == 0) {
+                mode = 0;
+            } else if (res == 1) {
+                mode = 1;
+            } else if (res == 2) {
                 free_tokens(tokens);
                 return 0;
-            } else if (res == 1) {
-                if (mode == 0) {
-                    printf("Currently running in sequential mode\n");
-                } else {
-                    printf("Currently running in parallel mode\n");
-                }
-            } else if (res == 2) {
-                mode = 0;
-            } else if (res == 3) {
-                mode = 1;
             }
         }
-        //for (int j=0; j < toklen; j++){
-        //   char **tokens2 = tokenify(tokens[j], " \t\n");
-        //    mode_tmp = run_mode(tokens2, mode);
-        //    execute_command(tokens2, mode);
-        //    free_tokens(tokens2);
-        //}
-        mode = mode_tmp;
         free_tokens(tokens);
         printf("%s", prompt);
     }
