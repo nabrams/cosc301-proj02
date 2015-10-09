@@ -130,8 +130,24 @@ int built_in_check(char * tokens[], int len){
     } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "s") == 0 || strcmp(tokens[1], "sequential") == 0)) {
         return 0;
     } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "p") == 0 || strcmp(tokens[1], "parallel") == 0)) {
-        return 1;    
-    } else return -1;
+        return 1;
+    } else if(strcmp(tokens[0], "job") == 0){
+        return 4;
+        //print list of all processes that are currently running in the background
+        //minimum, print process ID, command being executed, and process state
+    }
+    else if(strcmp(tokens[0], "pause") && strcmp(tokens[1], "PID")){
+        return 5;
+        //send signal to background processes with PID in order to pause process
+        //after pausing, run jobs command to show updated status
+    }
+    else if(strcmp(tokens[0], "resume") && strcmp(tokens[1], "PID")){
+        return 6; 
+        //send signal to background processes with PID in order to restart paused process
+        //run jobs after to show updated status
+    }
+    else return -1;
+    
 }
 
 void built_in_handler(int mode, int built_in) {
