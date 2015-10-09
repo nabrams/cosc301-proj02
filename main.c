@@ -127,21 +127,20 @@ int built_in_check(char * tokens[], int len){
         return 3;
     } else if (strcmp(tokens[0], "mode") == 0 && len == 1) {
         return 2;
-    } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "s") == 0 || strcmp(tokens[1], "sequential") == 0)) {
+    } else if (strcmp(tokens[0], "mode") == 0 && len == 2 && (strcmp(tokens[1], "s") == 0 || strcmp(tokens[1], "sequential") == 0)) {
         return 0;
-    } else if (strcmp(tokens[0], "mode") == 0 && (strcmp(tokens[1], "p") == 0 || strcmp(tokens[1], "parallel") == 0)) {
+    } else if (strcmp(tokens[0], "mode") == 0 && len == 2 && (strcmp(tokens[1], "p") == 0 || strcmp(tokens[1], "parallel") == 0)) {
         return 1;
     } else if(strcmp(tokens[0], "job") == 0){
         return 4;
         //print list of all processes that are currently running in the background
         //minimum, print process ID, command being executed, and process state
-    }
-    else if(strcmp(tokens[0], "pause") && strcmp(tokens[1], "PID")){
+    } else if(len == 2 && strcmp(tokens[0], "pause") == 0){
         return 5;
         //send signal to background processes with PID in order to pause process
         //after pausing, run jobs command to show updated status
     }
-    else if(strcmp(tokens[0], "resume") && strcmp(tokens[1], "PID")){
+    else if(len == 2 && strcmp(tokens[0], "resume") == 0) {
         return 6; 
         //send signal to background processes with PID in order to restart paused process
         //run jobs after to show updated status
@@ -157,7 +156,7 @@ void built_in_handler(int mode, int built_in) {
     }
 }
 
-int seq_execute(char *tokens[], int len, struct node * head, int mode) {
+int seq_execute(char *tokens[], int len, int mode) {
     int res = -1;
     for (int i = 0; i < len; i++) {
         char **tokens2 = tokenify(tokens[i], " \t\n");
@@ -183,6 +182,8 @@ int seq_execute(char *tokens[], int len, struct node * head, int mode) {
                 } else if (built_in == 3) {
                     free_tokens(tokens2);
                     return 2;
+                } else if (built_in == 4 || built_in == 5 || built_in == 6) {
+                    printf("That command is not supported in sequential mode\n");
                 }
             }
         }
@@ -243,6 +244,9 @@ void remove_comments(char * buffer){
 
 
 int main(int argc, char **argv) {
+    FILE *fp;
+    fp = fopen("shell-config", "r");
+
     welcome();
     char prompt[] = "Prompt>";
     printf("%s", prompt);
@@ -258,7 +262,7 @@ int main(int argc, char **argv) {
         if (*tokens == NULL) {
             printf("Invalid prompt\n");
         } else if (mode == 0) {
-            res = seq_execute(tokens, toklen, head, mode);    
+            res = seq_execute(tokens, toklen, mode);    
         } else if (mode == 1) {
             res = par_execute(tokens, toklen, head, mode);
         }
