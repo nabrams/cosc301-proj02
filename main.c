@@ -47,6 +47,35 @@ printf("We are so excited you came to try it out!\n");
 printf("--------------------------------------\n");
 }
 
+struct pathnode {
+    char path[128];
+    struct pathnode *next;
+};
+
+void pathlist_clear(struct pathnode *list) {
+    while (list != NULL) {
+        struct pathnode *tmp = list;
+        list = list->next;
+        free(tmp);
+    }
+}
+
+struct pathnode *pathlist_append(const char *path, struct pathnode *list) {
+    struct pathnode *newnode = malloc(sizeof(struct pathnode));
+    strcpy(newnode->path, path);
+    newnode->next = NULL;
+    struct pathnode *head = list;
+    if (head == NULL) {
+        head = newnode;
+        return head;
+    }
+    while (list->next != NULL) {
+        list = list->next;
+    }
+    list->next = newnode;
+    return head;
+}
+
 struct node {
     int job;
     struct node *next; 
@@ -156,7 +185,7 @@ void built_in_handler(int mode, int built_in) {
     }
 }
 
-int seq_execute(char *tokens[], int len, int mode) {
+int seq_execute(char *tokens[], int len, int mode, struct pathnode * phead) {
     int res = -1;
     for (int i = 0; i < len; i++) {
         char **tokens2 = tokenify(tokens[i], " \t\n");
@@ -168,6 +197,24 @@ int seq_execute(char *tokens[], int len, int mode) {
                     int childrv = 0;
                     wait(&childrv);
                 } else if (p == 0) {
+                    struct stat statresult;
+                    int rv = stat(tokens2[0], &statresult);
+                    if (rv < 0) {
+                        struct pathnode *pathhead = phead;
+                        while (pathhead != NULL) {
+                            char dest[200];
+                            strcpy(dest, pathhead->path);
+                            dest[strlen(dest)-1] = '/';
+                            dest[strlen(dest)] = '\0';
+                            strcat(dest, tokens2[0]);
+                            rv = stat(dest, &statresult);
+                            if (rv >= 0) {
+                                strcpy(tokens2[0], dest);
+                                break;
+                            }
+                            pathhead = pathhead->next;
+                        }
+                    }
                     if (execv(tokens2[0], tokens2) < 0) {
                         printf("Unrecognised command\n");
                     }
@@ -192,7 +239,7 @@ int seq_execute(char *tokens[], int len, int mode) {
     return res;
 }
 
-int par_execute(char *tokens[], int len, struct node * head, int mode) {
+int par_execute(char *tokens[], int len, struct node * head, int mode, struct pathnode * phead) {
     int res = -1;
     for (int i = 0; i < len; i++) {
         char** tokens2 = tokenify(tokens[i], " \t\n");
@@ -204,6 +251,24 @@ int par_execute(char *tokens[], int len, struct node * head, int mode) {
                     head = list_append(p, head);   
                 }
                 if (p == 0) {
+                    struct stat statresult;
+                    int rv = stat(tokens2[0], &statresult);
+                    if (rv < 0) {
+                        struct pathnode *pathhead = phead;
+                        while (pathhead != NULL) {
+                            char dest[200];
+                            strcpy(dest, pathhead->path);
+                            dest[strlen(dest)-1] = '/';
+                            dest[strlen(dest)] = '\0';
+                            strcat(dest, tokens2[0]);
+                            rv = stat(dest, &statresult);
+                            if (rv >= 0) {
+                                strcpy(tokens2[0], dest);
+                                break;
+                            }
+                            pathhead = pathhead->next;
+                        }
+                    }
                     if (execv(tokens2[0], tokens2) < 0) {
                         printf("Invalid command\n");
                     }
@@ -214,7 +279,7 @@ int par_execute(char *tokens[], int len, struct node * head, int mode) {
                 } else if (built_in == 3) {
                     res = 2;
                     free_tokens(tokens2);
-                    break;
+                    if (head == NULL) return res;
                 }
                 built_in_handler(mode, built_in);
             }
@@ -242,11 +307,21 @@ void remove_comments(char * buffer){
     return;
 }
 
-
-int main(int argc, char **argv) {
+struct pathnode * set_paths() {
     FILE *fp;
     fp = fopen("shell-config", "r");
+    struct pathnode* path_head = NULL;
+    char* buffer[1024];
+    while (fgets(buffer, 1024, fp) != NULL) {
+        path_head = pathlist_append(buffer, path_head);
+    }
+    fclose(fp);
+    return path_head;
+}
 
+
+int main(int argc, char **argv) {
+    struct pathnode *paths = set_paths();
     welcome();
     char prompt[] = "Prompt>";
     printf("%s", prompt);
@@ -262,9 +337,9 @@ int main(int argc, char **argv) {
         if (*tokens == NULL) {
             printf("Invalid prompt\n");
         } else if (mode == 0) {
-            res = seq_execute(tokens, toklen, mode);    
+            res = seq_execute(tokens, toklen, mode, paths);    
         } else if (mode == 1) {
-            res = par_execute(tokens, toklen, head, mode);
+            res = par_execute(tokens, toklen, head, mode, paths);
         }
         if (res != -1) {
             if (res == 0) {
@@ -273,12 +348,14 @@ int main(int argc, char **argv) {
                 mode = 1;
             } else if (res == 2) {
                 free_tokens(tokens);
+                pathlist_clear(paths);
                 return 0;
             }
         }
         free_tokens(tokens);
         printf("%s", prompt);
     }
+    pathlist_clear(paths);
     return 0;
 }
 
