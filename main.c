@@ -11,6 +11,9 @@
 #include <poll.h>
 #include <signal.h>
 
+//Natalie Abrams and Obi O'Brien
+//Due: Friday, October 9
+//We worked on almost the whole project in tandem. 
 
 void welcome(){
 printf("Weclome To our Shell!!!!\n");
@@ -78,9 +81,9 @@ struct pathnode *pathlist_append(const char *path, struct pathnode *list) {
 
 struct node {
     int job;
-    char * descriptor;
+    char descriptor[128];
     struct node *next; 
-    char * state;
+    char state [128];
 };
 
 
@@ -92,23 +95,53 @@ void list_clear(struct node *list) {
     }
 }
 
-struct node *list_append(int job, struct node *list, char * cur_job, char * state) {
+struct node *list_append(int job, struct node *head, char * cur_job, char * state) {
     struct node *newnode = malloc(sizeof(struct node));
     newnode->job = job;
-    newnode->descriptor = cur_job;
-    newnode->state = state;
+    strcpy(newnode->descriptor, cur_job);
+    strcpy(newnode->state, state);
     newnode->next = NULL;
-    struct node *head = list;
     if (head == NULL) {
-        head = newnode;
-        return head;
+        return newnode;
     }
+    struct node *list = head;
     while (list->next != NULL) {
         list = list->next;
     }
     list->next = newnode;
     return head;
-    
+}
+
+struct node *list_delete(int job, struct node *head) {
+    if (head == NULL) {
+        return NULL;
+    }
+    if (head->job == job) {
+        struct node *dead = head;
+        head = head->next;
+        free(dead);
+        return head;
+    }
+    struct node *tmp = head;
+    while (tmp->next != NULL) {
+        if (tmp->job == job) {
+            struct node *dead = tmp->next;
+            tmp->next = dead->next;
+            free(dead);
+            return head;
+        }
+        tmp = tmp->next;
+    }
+    return head;
+}
+
+void list_print(const struct node *list) {
+    int i = 0;
+    printf("In list_print\n");
+    while (list != NULL) {
+        printf("List item %d: %d\n", i++, list->job);
+        list = list->next;
+    }
 }
 
 char** tokenify(const char *s, char * whitespace) {
@@ -191,25 +224,10 @@ void built_in_handler(int mode, int built_in,struct node *head) {
     if (built_in == 4){
         struct node * jobs = head;
         while (jobs != NULL){
-            printf("Process: &d (%s) is %s\n", jobs->job, jobs->descriptor, jobs->state);
+            printf("Process: %d (%s) is %s\n", jobs->job, jobs->descriptor, jobs->state);
+            jobs = jobs->next;
         }
     }
-    if (built_in == 5){
-        kill(head->job, SIGSTOP);
-        struct node * jobs2 = head;
-        while (jobs2 != NULL){
-            printf("Process: &d (%s) is %s\n", jobs2->job, jobs2->descriptor, jobs2->state);
-        }
-    }   
-    if (built_in ==6){
-        kill(head->job,SIGCONT);
-        struct node * jobs3 = head;
-        while (jobs3 != NULL){
-            printf("Process: &d (%s) is %s\n", jobs3->job, jobs3->descriptor, jobs3->state);
-        }
- 
-    }
-
 }
 
 int seq_execute(char *tokens[], int len, int mode, struct pathnode * phead) {
@@ -246,7 +264,6 @@ int seq_execute(char *tokens[], int len, int mode, struct pathnode * phead) {
                         printf("Unrecognised command\n");
                     }
                 }
-                printf("child process finished\n");
             } else {
                 if (built_in == 0 || built_in == 1) {
                     res = built_in;
@@ -266,7 +283,7 @@ int seq_execute(char *tokens[], int len, int mode, struct pathnode * phead) {
     return res;
 }
 
-int par_execute(char *tokens[], int len, struct node * head, int mode, struct pathnode * phead) {
+int par_execute(char *tokens[], int len, struct node *head, int mode, struct pathnode * phead) {
     int res = -1;
     for (int i = 0; i < len; i++) {
         char** tokens2 = tokenify(tokens[i], " \t\n");
@@ -275,9 +292,8 @@ int par_execute(char *tokens[], int len, struct node * head, int mode, struct pa
             int built_in = built_in_check(tokens2, arr_len(tokens2));
             if (built_in == -1) {
                 pid_t p = fork();
-                //kill(p, SIGCONT);
                 if (p > 0) {
-                    head = list_append(p, head, tokens[i], state);   
+                    head = list_append(p, head, tokens[i], state);
                 }
                 if (p == 0) {
                     struct stat statresult;
@@ -308,21 +324,30 @@ int par_execute(char *tokens[], int len, struct node * head, int mode, struct pa
                 } else if (built_in == 3) {
                     res = 2;
                     free_tokens(tokens2);
-                    if (head == NULL) return res;
+                    if (head == NULL) {
+                        return res;
+                    }
+                } else if (built_in == 5 || built_in == 6) {
+                    struct node * tmp = head;
+                    while (tmp != NULL) {
+                        if (tmp->job == tokens2[1]) {
+                            if (built_in == 5) kill(tokens[1], SIGSTOP);
+                            else if (built_in == 6) kill(tokens[1], SIGCONT);
+                            break;
+                        }
+                    }
+                    printf("The job you requested cannot be found.\n");
                 }
                 built_in_handler(mode, built_in, head);
             }
         }
         free_tokens(tokens2);
     }
-    struct node * list = head;
-    while (list != NULL) {
-        int childrv = 0;
-        waitpid(list->job, &childrv, 0);
-        printf("child process finished\n");
-        list = list->next;
+    pid_t pid;
+    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+        head = list_delete(pid, head);
+        printf("Process %d has terminated\n", pid);
     }
-    list_clear(head);
     return res;
 }
 
@@ -357,8 +382,8 @@ int main(int argc, char **argv) {
     fflush(stdout);
     char *buffer[1024];
     int mode = 0; //starts in sequential mode
+    struct node * head = NULL;
     while(fgets(buffer,1024,stdin) != NULL){
-        struct node * head = NULL;
         remove_comments(buffer);
         char **tokens = tokenify(buffer, ";");
         int toklen = arr_len(tokens);
@@ -376,14 +401,22 @@ int main(int argc, char **argv) {
             } else if (res == 1) {
                 mode = 1;
             } else if (res == 2) {
+                list_clear(head);
                 free_tokens(tokens);
                 pathlist_clear(paths);
                 return 0;
             }
         }
         free_tokens(tokens);
+        struct pollfd pfd[1];
+        pfd[0].fd = 0;
+        pfd[0].events = POLLIN;
+        pfd[0].revents = 0;
+        poll(&pfd[0], 1, 1000);
         printf("%s", prompt);
+        fflush(stdout);
     }
+    list_clear(head);
     pathlist_clear(paths);
     return 0;
 }
